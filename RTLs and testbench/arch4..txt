@@ -1,0 +1,105 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+entity arch4 is
+    generic (
+        n : integer := 32
+    );
+    port (
+        clk          : in  std_logic;                       
+        reset_n      : in  std_logic;                     
+        start        : in  std_logic;                       
+        A : in  unsigned((2 * n) - 1 downto 0);  
+        root         : out unsigned(n - 1 downto 0);       
+        finished     : out std_logic                       
+    );
+end arch4;
+
+architecture rtl of arch4 is
+    type state_type is (SAMPLE, IDLE, COMPUTING);
+    signal state : state_type := SAMPLE;
+    signal finished_flag : std_logic := '0';
+    signal input_value : unsigned(2*n - 1 downto 0) := (others => '0');
+    signal temp_Z : unsigned(n -1 downto 0) := (others => '0'); 
+    signal temp_D : unsigned(2*n -1 downto 0) := (others => '0');
+    signal temp_R : unsigned(2*n -1 downto 0) := (others => '0');
+begin
+    process(clk, reset_n) is
+    variable Z   : unsigned(n -1 downto 0) := (others => '0'); 
+    variable D   : unsigned(2*n -1 downto 0) := (others => '0'); 
+    variable R   : unsigned(2*n -1 downto 0) := (others => '0');
+    variable Z_dash : unsigned(n -1 downto 0) := (others => '0'); 
+    variable D_dash : unsigned(2*n -1 downto 0) := (others => '0');
+    variable R_dash : unsigned(2*n -1 downto 0) := (others => '0');
+    begin 
+        if reset_n = '0' then
+            state <= SAMPLE;
+            finished_flag <= '0';
+            input_value <= (others => '0');
+            R := (others => '0');
+            Z := (others => '0');
+            D := (others => '0');
+        elsif rising_edge(clk) then   --10#106276  10#1194877489
+            case state is
+                when SAMPLE =>
+                    input_value <= A;
+                    D := A;
+                    Z := (others => '0');
+                    R := (others => '0');
+                    finished_flag <= '0';
+                    if start = '1' then
+                    state <= COMPUTING;
+                    else 
+                    state <= IDLE;
+                    end if; 
+                when IDLE =>
+                    if start = '1' then
+                        state <= COMPUTING; 
+                    end if;
+                when COMPUTING =>
+                -- first stage
+                R := (others => '0');
+                Z := (others => '0');
+                D := A;
+                for i in n-1 downto n/2 loop
+                    if (signed(R)>= 0)then
+                        R := shift_left(R, 2) + shift_right(D, 2*n-2) - shift_left(Z, 2) - to_unsigned(1, 2*n); 
+                    else
+                        R := shift_left(R, 2) + shift_right(D, 2*n-2) + shift_left(Z, 2) + to_unsigned(3, 2*n); 
+                    end if;
+                    if signed(R)>=0 then
+                        Z := shift_left(Z,1)+ to_unsigned(1, n);
+                        else 
+                        Z := shift_left(Z, 1);  
+                    end if;
+                    D := shift_left(D, 2);
+                end loop;
+                temp_R <= R;
+                temp_Z <= Z;
+                temp_D <= D;
+                R_dash := temp_R;
+                Z_dash := temp_Z;
+                D_dash := temp_D;
+                for i in (n/2)-1 downto 0 loop
+                    if (signed(R_dash)>= 0)then
+                        R_dash := shift_left(R_dash, 2) + shift_right(D_dash, 2*n-2) - shift_left(Z_dash, 2) - to_unsigned(1, 2*n); 
+                    else
+                        R_dash := shift_left(R_dash, 2) + shift_right(D_dash, 2*n-2) + shift_left(Z_dash, 2) + to_unsigned(3, 2*n); 
+                    end if;
+                    if signed(R_dash)>=0 then
+                        Z_dash := shift_left(Z_dash,1)+ to_unsigned(1, n);
+                        else 
+                        Z_dash := shift_left(Z_dash, 1);  
+                    end if;
+                    D_dash := shift_left(D_dash, 2);
+                end loop;
+                finished_flag <= '1';
+                root <= Z_dash;
+                finished <= finished_flag;
+                if (start = '0') then
+                    state <= IDLE;
+                end if;
+            end case;
+        end if;
+    end process;
+end rtl;

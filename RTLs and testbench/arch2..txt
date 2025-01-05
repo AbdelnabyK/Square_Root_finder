@@ -1,0 +1,89 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+entity arch2 is
+    generic (
+        n : integer := 32
+    );
+    port (
+        clk          : in  std_logic;                       
+        reset_n      : in  std_logic;                     
+        start        : in  std_logic;                       
+        A : in  unsigned((2 * n) - 1 downto 0);  
+        root         : out unsigned(n - 1 downto 0);       
+        finished     : out std_logic                       
+    );
+end arch2;
+
+architecture rtl of arch2 is
+    type state_type is (SAMPLE, IDLE, COMPUTING, DONE);
+    signal state : state_type := SAMPLE;
+    signal finished_flag : std_logic := '0';
+    signal input_value : unsigned(2*n - 1 downto 0) := (others => '0');
+    signal Z : unsigned(n -1 downto 0); 
+    signal D : unsigned(2*n -1 downto 0) ; 
+    signal i : integer := n-1;
+begin
+    process(clk, reset_n) is
+    variable R   : unsigned(2*n -1 downto 0) ;
+    begin 
+        if reset_n = '0' then
+            state <= SAMPLE;
+            finished_flag <= '0';
+            input_value <= (others => '0');
+            R := (others => '0');
+            Z <= (others => '0');
+            D <= (others => '0');
+            i <= n-1;
+        elsif rising_edge(clk) then   --10#106276  10#1194877489
+            case state is
+                when SAMPLE =>
+                    input_value <= A;
+                    i <= n-1;
+                    D <= A;
+                    Z <= (others => '0');
+                    R := (others => '0');
+                    finished_flag <= '0';
+                    if start = '1' then
+                    state <= COMPUTING;
+                    else 
+                    state <= IDLE;
+                    end if; 
+
+                when IDLE =>
+                    if start = '1' then
+                        state <= COMPUTING; 
+                    end if;
+
+                when COMPUTING =>
+                    if i >= 0 then
+                        i <= i-1;
+                        if (signed(R)>= 0)then
+                            R := shift_left(R, 2) + shift_right(D, 2*n-2) - shift_left(Z, 2) - to_unsigned(1, 2*n); 
+                        else
+                            R := shift_left(R, 2) + shift_right(D, 2*n-2) + shift_left(Z, 2) + to_unsigned(3, 2*n); 
+                        end if;
+                        if signed(R)>=0 then
+                            Z <= shift_left(Z,1)+ to_unsigned(1, n);
+                            else 
+                            Z <= shift_left(Z, 1);  
+                        end if;
+                        D <= shift_left(D, 2);
+                        if start = '0' then
+                            state <= IDLE;
+                        end if;
+                    else
+                        finished_flag <= '1';
+                        state <= DONE;
+                        root <= Z;
+                        finished <= finished_flag;
+                    end if;
+                when DONE =>
+                    finished_flag <= '1'; 
+                    if input_value /= A then
+                        state <= SAMPLE;
+                    end if;
+            end case;
+        end if;
+    end process;
+end rtl;

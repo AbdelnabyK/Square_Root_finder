@@ -1,0 +1,51 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+entity arch3 is
+    generic (
+        n : integer := 32
+    );
+    port (
+        reset_n : in  std_logic;                     
+        A : in  unsigned((2 * n) - 1 downto 0);  
+        root : out unsigned(n - 1 downto 0)      
+    );
+end arch3;
+architecture rtl of arch3 is
+begin
+    process(reset_n, A) is
+    variable Z   : unsigned(n -1 downto 0) := (others => '0'); 
+    variable D   : unsigned(2*n -1 downto 0) := (others => '0'); 
+    variable R   : unsigned(2*n -1 downto 0) := (others => '0');
+    begin  --10#106276 10#1194877489  10#1152921504606846977  10#1844674407370955169
+        if reset_n = '0' then
+            R := (others => '0');
+            Z := (others => '0');
+            D := (others => '0');
+        else
+            R := (others => '0');
+            Z := (others => '0');
+            D := A;
+            for i in n-1 downto 0 loop
+                report "iteration is " & integer'image(i); 
+                if (signed(R)>= 0)then
+                    R := shift_left(R, 2) + shift_right(D, 2*n-2) - shift_left(Z, 2) - to_unsigned(1, 2*n); 
+                   -- report "Postive one R is "& to_string(R);
+                else
+                    R := shift_left(R, 2) + shift_right(D, 2*n-2) + shift_left(Z, 2) + to_unsigned(3, 2*n); 
+                   -- report "Negative one R is "& to_string(R);
+                end if;
+                if signed(R)>=0 then
+                    report "Postive two";
+                    Z := shift_left(Z,1)+ to_unsigned(1, n);
+                    else 
+                    report "Positive two";
+
+                    Z := shift_left(Z, 1);  
+                end if;
+                D := shift_left(D, 2);
+            end loop;
+        end if;
+        root <= Z;
+    end process;
+end rtl;

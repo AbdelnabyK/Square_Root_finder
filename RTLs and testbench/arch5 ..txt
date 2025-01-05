@@ -1,0 +1,125 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity arch5 is
+    generic (
+        n : integer := 32
+    );
+    port (
+        clk          : in  std_logic;                       
+        reset_n      : in  std_logic;                     
+        start        : in  std_logic;                       
+        A : in  unsigned((2 * n) - 1 downto 0);  
+        root         : out unsigned(n - 1 downto 0);       
+        finished     : out std_logic                       
+    );
+end arch5;
+architecture rtl of arch5 is
+    function mux(a : unsigned; b : unsigned; s : std_logic) return unsigned is
+        variable outp : unsigned(2*n - 1 downto 0);
+    begin
+        for i in 2*n-1 downto 0 loop
+            outp(i) := (a(i) and s) or  (b(i) and not(s));
+        end loop;
+        return outp;
+    end function;
+
+    function shifter(a: unsigned; amount : integer ; direction : std_logic ) return unsigned is
+        variable outp : unsigned(2*n - 1 downto 0);
+        begin
+            outp := mux(shift_right(a, amount),shift_left(a, amount),direction);
+            
+            return outp;
+    end function;
+
+    function zshifter(a: unsigned; lsbit : std_logic) return unsigned is
+        variable outp : unsigned(2*n-1 downto 0);
+        begin 
+        outp := shifter(a,1, '0');
+        outp(0) := (outp(0) and not(lsbit)) or (not outp(0)  and lsbit);
+        return outp;
+    end function;
+
+
+    
+
+    function ALU(R: unsigned; D: unsigned; Z: unsigned; direction : std_logic) return unsigned is 
+    variable outp : unsigned(2*n-1 downto 0);
+    begin 
+    outp := mux(shifter(R,2, '0') + shifter(D,2*n-2, '1') - shifter(D,2*n-2, '0') - to_unsigned(1, 2*n),
+                shifter(R,2, '0') + shifter(D,2*n-2, '1') + shifter(D,2*n-2, '0') + to_unsigned(3, 2*n), 
+                direction);
+    return outp;
+    end function; 
+
+
+
+
+
+    function FSM(A: integer; B : std_logic; C : std_logic; D: std_logic; E: std_logic; F: std_logic) return std_logic_vector is 
+    --as follws:FSM(i_end: integer; reset : std_logic; state : std_logic, state : std_logic; start: std_logic; input_chage: boolean)
+    variable outp : std_logic_vector(1 downto 0);
+    variable sig : std_logic;
+    begin 
+    if A = 0 then 
+        sig:= '0';
+    else
+        sig:= '1';
+    end if;
+    outp(0) := (B and not(C) and not(E)) or (B and not(D) and not(E)) or (not(sig) and B and C and not(D)) or (B and C and D and not(F));
+    outp(1) := (B and not(C) and E) or (B and not(D) and E) or (not(sig) and B and C and not(D)) or (B and C and D and not(F));
+    return outp;
+    end function;
+
+    function ALU_sign(R: unsigned) return std_logic is 
+    variable ALUsign : std_logic;
+    begin
+    if (signed(R)>= 0) then 
+        ALUsign := '1';
+        else
+        ALUsign := '0';
+    end if;
+    return ALUsign;
+    end function;
+
+    signal input_value : unsigned(2*n - 1 downto 0) := (others => '0');
+    signal A_change : std_logic:= '0';
+    signal state : std_logic_vector(1 downto 0):= "00";
+    begin 
+    process(clk)
+    variable R_sign  : std_logic := '0';
+    variable R : unsigned(2*n -1 downto 0):= (others => '0'); 
+    variable Z : unsigned(2*n -1 downto 0):= (others => '0'); 
+    variable D : unsigned(2*n -1 downto 0):= (others => '0');
+    variable i : integer:= n-1; --
+    begin
+
+
+
+
+
+    if rising_edge(clk) then
+        finished <= state(0) and state(1);
+        state <= FSM(i, reset_n, state(1),state(0),start,A_change); --i=0	reset	S1	S0	start	input_change
+        R := mux(mux(R, ALU(R, D, Z, R_sign ), state(0)), mux(R, to_unsigned(0, 2*n), state(0)), state(1));
+        R_sign  :=ALU_sign(R); 
+        Z := mux(mux(Z, zshifter(Z, R_sign), state(0)), mux(Z, to_unsigned(0, 2*n), state(0)), state(1));
+        i := to_integer(mux(mux(to_unsigned(i, 2*n), to_unsigned(i-1, 2*n), state(0)), to_unsigned(n-1, 2*n), state(1)));
+        D := mux(mux(D, shifter(D,2,'0'), state(0)), mux(D, A, state(0)), state(1));
+        input_value <= mux(input_value, A, state(1) or state(0));
+        root <= Z(n-1 downto 0);
+        if input_value /= A then
+            A_change <= '1';
+        else 
+            A_change <= '0';
+        end if;
+    end if;
+
+
+
+
+
+    
+    end process;
+    end rtl;
